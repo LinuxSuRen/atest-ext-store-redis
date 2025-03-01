@@ -95,7 +95,6 @@ func (s *remoteserver) Query(ctx context.Context, query *server.DataQuery) (resu
 	for {
 		// Perform SCAN to find keys matching the prefix
 		var partialKeys []string
-		var err error
 		partialKeys, cursor, err = cli.Scan(ctx, cursor, prefix, count).Result()
 		if err != nil {
 			return
