@@ -1,0 +1,43 @@
+version: '3.1'
+services:
+  testing:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      redis:
+        condition: service_healthy
+      extension:
+        condition: service_started
+    volumes:
+      - type: volume
+        source: cache
+        target: /var/data
+    links:
+      - redis
+  extension:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        - "GO_BUILDER=ghcr.io/linuxsuren/library/golang:1.23"
+        - "BASE_IMAGE=ghcr.io/linuxsuren/library/alpine:3.12"
+    ports:
+      - "7073:7073"
+    depends_on:
+      redis:
+        condition: service_healthy
+    links:
+      - redis
+  redis:
+    image: ghcr.io/linuxsuren/library/redis:7.0.14-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 60s
+      retries: 10
+    ports:
+      - "6379:6379"
+
+volumes:
+  cache:
