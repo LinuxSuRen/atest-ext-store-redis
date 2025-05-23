@@ -16,3 +16,7 @@ init-env: hd
 	gh extension install linuxsuren/gh-dev
 run-e2e:
 	cd e2e && ./start.sh
+cp-restart:
+	systemctl stop atest
+	make cp
+	systemctl start atest
