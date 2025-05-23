@@ -3,8 +3,9 @@ package pkg
 import (
 	"context"
 	"fmt"
-	"github.com/redis/go-redis/v9"
 	"log"
+
+	"github.com/redis/go-redis/v9"
 
 	"github.com/linuxsuren/api-testing/pkg/extension"
 	"github.com/linuxsuren/api-testing/pkg/server"
@@ -80,7 +81,7 @@ func (s *remoteserver) Query(ctx context.Context, query *server.DataQuery) (resu
 		return
 	}
 
-	prefix := query.Key
+	prefix := query.Sql
 	if prefix == "" {
 		err = fmt.Errorf("prefix is required")
 		return
