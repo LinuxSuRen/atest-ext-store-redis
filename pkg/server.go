@@ -3,6 +3,7 @@ package pkg
 import (
 	"context"
 	"fmt"
+	"github.com/linuxsuren/api-testing/pkg/testing"
 	"github.com/redis/go-redis/v9"
 	"log"
 
@@ -28,24 +29,80 @@ func getKey(name string) string {
 }
 
 func (s *remoteserver) ListTestSuite(ctx context.Context, _ *server.Empty) (suites *remote.TestSuites, err error) {
+	var client *redis.Client
+	if client, err = s.getClient(ctx); err != nil {
+		return
+	}
+
+	suites = &remote.TestSuites{
+		Data: []*remote.TestSuite{},
+	}
+
+	for _, key := range client.Keys(ctx, keyPrefix+"*").Val() {
+		var data []byte
+		if data, err = client.Get(ctx, key).Bytes(); err == nil {
+			var testSuite *testing.TestSuite
+			if testSuite, err = testing.Parse(data); err == nil {
+				suites.Data = append(suites.Data, remote.ConvertToGRPCTestSuite(testSuite))
+			}
+		}
+	}
 	return
 }
 func (s *remoteserver) CreateTestSuite(ctx context.Context, testSuite *remote.TestSuite) (reply *server.Empty, err error) {
+	reply = &server.Empty{}
+
+	var client *redis.Client
+	if client, err = s.getClient(ctx); err != nil {
+		return
+	}
+
+	var data []byte
+	if data, err = testing.ToYAML(remote.ConvertToNormalTestSuite(testSuite)); err == nil {
+		if err = client.Set(ctx, getKey(testSuite.Name), data, 0).Err(); err == nil {
+			reply = &server.Empty{}
+		}
+	}
 	return
 }
 func (s *remoteserver) GetTestSuite(ctx context.Context, suite *remote.TestSuite) (reply *remote.TestSuite, err error) {
+	reply = &remote.TestSuite{}
+	var client *redis.Client
+	if client, err = s.getClient(ctx); err != nil {
+		return
+	}
+
+	var data []byte
+	if data, err = client.Get(ctx, getKey(suite.Name)).Bytes(); err == nil {
+		var testSuite *testing.TestSuite
+		if testSuite, err = testing.Parse(data); err == nil {
+			reply = remote.ConvertToGRPCTestSuite(testSuite)
+		}
+	}
 	return
 }
 func (s *remoteserver) UpdateTestSuite(ctx context.Context, suite *remote.TestSuite) (reply *remote.TestSuite, err error) {
 	return
 }
 func (s *remoteserver) DeleteTestSuite(ctx context.Context, suite *remote.TestSuite) (reply *server.Empty, err error) {
+	var client *redis.Client
+	if client, err = s.getClient(ctx); err != nil {
+		return
+	}
+
+	if err = client.Del(ctx, getKey(suite.Name)).Err(); err == nil {
+		reply = &server.Empty{}
+	}
 	return
 }
 func (s *remoteserver) ListTestCases(ctx context.Context, suite *remote.TestSuite) (reply *server.TestCases, err error) {
 	return
 }
 func (s *remoteserver) CreateTestCase(ctx context.Context, testcase *server.TestCase) (reply *server.Empty, err error) {
+	var client *redis.Client
+	if client, err = s.getClient(ctx); err != nil {
+		return
+	}
 	return
 }
 func (s *remoteserver) GetTestCase(ctx context.Context, input *server.TestCase) (reply *server.TestCase, err error) {
@@ -60,7 +117,16 @@ func (s *remoteserver) DeleteTestCase(ctx context.Context, testcase *server.Test
 func (s *remoteserver) Verify(ctx context.Context, in *server.Empty) (reply *server.ExtensionStatus, err error) {
 	reply = &server.ExtensionStatus{
 		Version: version.GetVersion(),
-		Ready:   true,
+	}
+
+	var client *redis.Client
+	if client, err = s.getClient(ctx); err == nil {
+		if _, err = client.Ping(ctx).Result(); err != nil {
+			reply.Ready = false
+			reply.Message = fmt.Sprintf("redis server is not ready, error: %s", err.Error())
+		} else {
+			reply.Ready = true
+		}
 	}
 	return
 }
