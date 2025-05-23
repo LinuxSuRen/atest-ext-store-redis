@@ -3,8 +3,9 @@ package pkg
 import (
 	"context"
 	"fmt"
-	"github.com/redis/go-redis/v9"
 	"log"
+
+	"github.com/redis/go-redis/v9"
 
 	"github.com/linuxsuren/api-testing/pkg/extension"
 	"github.com/linuxsuren/api-testing/pkg/server"
@@ -80,41 +81,31 @@ func (s *remoteserver) Query(ctx context.Context, query *server.DataQuery) (resu
 		return
 	}
 
-	prefix := query.Key
+	prefix := query.Sql
 	if prefix == "" {
 		err = fmt.Errorf("prefix is required")
 		return
 	}
 
-	var keys []string
-	cursor := uint64(0)
-	const count = 1000
+	cursor := uint64(query.Offset)
+	count := query.Limit
 
 	result = &server.DataQueryResult{}
 
-	for {
-		// Perform SCAN to find keys matching the prefix
-		var partialKeys []string
-		partialKeys, cursor, err = cli.Scan(ctx, cursor, prefix, count).Result()
-		if err != nil {
-			return
-		}
+	// Perform SCAN to find keys matching the prefix
+	var partialKeys []string
+	partialKeys, cursor, err = cli.Scan(ctx, cursor, prefix, int64(count)).Result()
+	if err != nil {
+		return
+	}
 
-		// Collect found keys
-		keys = append(keys, partialKeys...)
-
-		for _, key := range keys {
-			if val := cli.Get(ctx, key); val != nil {
-				result.Data = append(result.Data, &server.Pair{
-					Key:   key,
-					Value: val.Val(),
-				})
-			}
-		}
-
-		// Break loop when all keys are collected
-		if cursor == 0 {
-			break
+	// Collect found keys
+	for _, key := range partialKeys {
+		if val := cli.Get(ctx, key); val != nil && val.Err() == nil && len(val.Val()) <= 100 {
+			result.Data = append(result.Data, &server.Pair{
+				Key:   key,
+				Value: val.Val(),
+			})
 		}
 	}
 	return
